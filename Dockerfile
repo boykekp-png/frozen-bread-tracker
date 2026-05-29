@@ -16,6 +16,11 @@ RUN npm ci --production
 # Copy the rest of the application
 COPY . .
 
+# Create persistent volume directory for SQLite database
+RUN mkdir -p /data
+
 EXPOSE 3000
+
+ENV NODE_ENV=production
 
 CMD ["node", "backend/server.js"]

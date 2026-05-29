@@ -13,8 +13,10 @@ if (!process.env.JWT_SECRET) {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(cors());
+// In production, frontend is served from same origin — restrict CORS
+const isProduction = process.env.NODE_ENV === 'production';
+const corsOrigin = isProduction ? false : true; // false = same-origin only in production
+app.use(cors({ origin: corsOrigin }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
