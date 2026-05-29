@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frozen Bread Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --table-bg: #1e293b;
+            --thead-bg: #334155;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --th-text: #94a3b8;
+            --border: #475569;
+            --hover: #334155;
+            --note-color: #64748b;
+        }
+
+        .light-mode {
+            --bg: #f1f5f9;
+            --table-bg: #ffffff;
+            --thead-bg: #f1f5f9;
+            --text: #334155;
+            --text-muted: #64748b;
+            --th-text: #64748b;
+            --border: #e2e8f0;
+            --hover: #f8fafc;
+            --note-color: #94a3b8;
+        }
+
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg); min-height: 100vh; margin: 0; transition: background 0.2s; }
+        .container { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; }
+        .header { background: #1e293b; color: #fff; padding: 1.25rem 1.5rem; border-radius: 12px; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+        .header h1 { font-size: 1.4rem; font-weight: 700; margin: 0; }
+        .header-right { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+        .date-input { background: #334155; color: #fff; border: 1px solid #475569; border-radius: 6px; padding: 0.4rem 0.75rem; font-size: 0.9rem; }
+        .date-input::-webkit-calendar-picker-indicator { filter: invert(1); }
+        table { width: 100%; border-collapse: collapse; background: var(--table-bg); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: background 0.2s; }
+        thead { background: var(--thead-bg); transition: background 0.2s; }
+        th { padding: 0.75rem 1rem; text-align: left; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--th-text); letter-spacing: 0.05em; transition: color 0.2s; }
+        td { padding: 0.75rem 1rem; border-top: 1px solid var(--border); font-size: 0.95rem; color: var(--text); transition: color 0.2s, border-color 0.2s; }
+        tr:hover td { background: var(--hover); }
+        .note { color: var(--note-color); font-size: 0.8rem; margin-top: 0.75rem; transition: color 0.2s; }
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { opacity: 0.7; }
+        th.sortable .sort-arrow { margin-left: 4px; font-size: 0.65rem; }
+
+        /* Toggle switch */
+        .toggle-wrap { display: flex; align-items: center; gap: 8px; }
+        .toggle-label { font-size: 0.85rem; color: #cbd5e1; }
+        .toggle { position: relative; width: 48px; height: 26px; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle .slider { position: absolute; inset: 0; background: #3b82f6; border-radius: 26px; cursor: pointer; transition: background 0.3s; }
+        .toggle .slider::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: transform 0.3s; }
+        .toggle input:checked + .slider { background: #334155; }
+        .toggle input:checked + .slider::before { transform: translateX(22px); }
+
+        @media (max-width: 600px) {
+            .header { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🍞 Frozen Bread Tracker</h1>
+            <div class="header-right">
+                <div class="date-picker">
+                    <span class="text-sm text-slate-300 mr-2">Today is:</span>
+                    <input type="date" id="selected-date" class="date-input">
+                </div>
+                <div class="toggle-wrap">
+                    <span class="toggle-label">🌙</span>
+                    <label class="toggle">
+                        <input type="checkbox" id="theme-toggle">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="toggle-label">☀️</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="table-container">
+            <div class="text-center text-slate-400 py-8">Loading bread types...</div>
+        </div>
+        <p class="note">Expiration dates are calculated as: <strong>selected date + (expiration days − 1)</strong>.</p>
+    </div>
+
+    <script>
+        // --- Theme ---
+        const body = document.body;
+        const themeToggle = document.getElementById('theme-toggle');
+
+        function applyTheme() {
+            if (themeToggle.checked) {
+                body.classList.add('light-mode');
+            } else {
+                body.classList.remove('light-mode');
+            }
+            localStorage.setItem('bread-tracker-theme', themeToggle.checked ? 'light' : 'dark');
+        }
+
+        // Default = dark. If stored preference is light, check the toggle.
+        const savedTheme = localStorage.getItem('bread-tracker-theme');
+        if (savedTheme === 'light') {
+            themeToggle.checked = true;
+            body.classList.add('light-mode');
+        }
+
+        themeToggle.addEventListener('change', applyTheme);
+
+        // --- Bread Data ---
+        const breadTypes = [
+            { sku: '30010', name: 'Donut',                  expiration_days: 5 },
+            { sku: '26382', name: 'Organic Whole Wheat',    expiration_days: 6 },
+            { sku: '38917', name: 'Strawberry Sheetcake',   expiration_days: 5 },
+            { sku: '43424', name: 'Ciabatta',               expiration_days: 3 },
+            { sku: '73267', name: 'Baguette',               expiration_days: 3 },
+            { sku: '67873', name: 'Half Moon Cake',         expiration_days: 7 },
+            { sku: '38473', name: 'French Brioche',         expiration_days: 14 },
+            { sku: '90843', name: 'Kringle',                expiration_days: 4 }
+        ];
+
+        // --- Sorting ---
+        let sortColumn = null;
+        let sortDirection = 'asc';
+
+        const columns = [
+            { key: 'sku',              label: 'SKU' },
+            { key: 'name',             label: 'Bread Name' },
+            { key: 'expiration_days',  label: 'Expiration Days' },
+            { key: 'expiration_date',  label: 'Expiration Date' }
+        ];
+
+        function getTodayDate() {
+            const d = new Date();
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        }
+
+        function computeExpirationDate(expirationDays) {
+            const selectedDate = document.getElementById('selected-date').value;
+            if (!selectedDate) return null;
+            const base = new Date(selectedDate + 'T00:00:00');
+            base.setDate(base.getDate() + (expirationDays - 1));
+            return base;
+        }
+
+        function formatExpirationDate(date) {
+            if (!date) return '-';
+            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+
+        function toggleSort(columnKey) {
+            if (sortColumn === columnKey) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = columnKey;
+                sortDirection = 'asc';
+            }
+            renderTable();
+        }
+
+        function getSortedData() {
+            const data = breadTypes.map(type => ({
+                ...type,
+                expiration_date: computeExpirationDate(type.expiration_days)
+            }));
+
+            if (!sortColumn) return data;
+
+            return data.sort((a, b) => {
+                let valA, valB;
+
+                if (sortColumn === 'expiration_date') {
+                    valA = a.expiration_date ? a.expiration_date.getTime() : 0;
+                    valB = b.expiration_date ? b.expiration_date.getTime() : 0;
+                } else if (sortColumn === 'expiration_days') {
+                    valA = a.expiration_days;
+                    valB = b.expiration_days;
+                } else if (sortColumn === 'sku') {
+                    valA = a.sku;
+                    valB = b.sku;
+                    return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                } else {
+                    valA = a.name;
+                    valB = b.name;
+                    return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                }
+
+                return sortDirection === 'asc' ? valA - valB : valB - valA;
+            });
+        }
+
+        function getArrow(columnKey) {
+            if (sortColumn !== columnKey) return '';
+            return sortDirection === 'asc' ? '▲' : '▼';
+        }
+
+        function renderTable() {
+            const container = document.getElementById('table-container');
+            const sorted = getSortedData();
+
+            let html = '<table>';
+            html += '<thead><tr>';
+            columns.forEach(col => {
+                const arrow = getArrow(col.key);
+                html += `<th class="sortable" onclick="toggleSort('${col.key}')">${col.label} <span class="sort-arrow">${arrow}</span></th>`;
+            });
+            html += '</tr></thead><tbody>';
+
+            sorted.forEach(type => {
+                const expFormatted = formatExpirationDate(type.expiration_date);
+                html += '<tr>';
+                html += `<td>${type.sku}</td>`;
+                html += `<td>${type.name}</td>`;
+                html += `<td>${type.expiration_days} days</td>`;
+                html += `<td>${expFormatted}</td>`;
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const dateInput = document.getElementById('selected-date');
+            dateInput.value = getTodayDate();
+            renderTable();
+            dateInput.addEventListener('change', renderTable);
+        });
+    </script>
+</body>
+</html>
