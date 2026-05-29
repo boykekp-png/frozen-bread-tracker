@@ -12,11 +12,10 @@ function logActivity(userId, activityType, description, req) {
   const ipAddress = req.ip || req.connection?.remoteAddress || null;
   const userAgent = req.get('user-agent') || null;
 
-  db.run(
+  db.prepare(
     `INSERT INTO user_activity (user_id, activity_type, description, ip_address, user_agent)
-     VALUES (?, ?, ?, ?, ?)`,
-    [userId, activityType, description, ipAddress, userAgent]
-  );
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(userId, activityType, description, ipAddress, userAgent);
 }
 
 // Register new user
@@ -33,32 +32,21 @@ router.post('/register', async (req, res) => {
     }
 
     // Check if user already exists by email
-    db.get('SELECT id FROM users WHERE email = ?', [email], async (err, user) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error.' });
-      }
+    const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    if (user) {
+      return res.status(400).json({ error: 'User already exists with this email.' });
+    }
 
-      if (user) {
-        return res.status(400).json({ error: 'User already exists with this email.' });
-      }
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
+    // Create new user
+    db.prepare(
+      'INSERT INTO users (email, name, password) VALUES (?, ?, ?)'
+    ).run(email, name, hashedPassword);
 
-      // Create new user
-      db.run(
-        'INSERT INTO users (email, name, password) VALUES (?, ?, ?)',
-        [email, name, hashedPassword],
-        function (err) {
-          if (err) {
-            return res.status(500).json({ error: 'Failed to create user.' });
-          }
-
-          res.status(201).json({
-            message: 'Registration successful. Please wait for admin activation.'
-          });
-        }
-      );
+    res.status(201).json({
+      message: 'Registration successful. Please wait for admin activation.'
     });
   } catch (error) {
     res.status(500).json({ error: 'Server error.' });
@@ -75,40 +63,35 @@ router.post('/login', (req, res) => {
     }
 
     // Find user by email
-    db.get('SELECT * FROM users WHERE email = ?', [email], (err, user) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error.' });
-      }
+    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
 
-      if (!user) {
-        return res.status(401).json({ error: 'Invalid credentials.' });
-      }
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials.' });
+    }
 
-      if (!user.active) {
-        return res.status(403).json({ error: 'Account not yet activated. Please wait for admin approval.' });
-      }
+    if (!user.active) {
+      return res.status(403).json({ error: 'Account not yet activated. Please wait for admin approval.' });
+    }
 
-      bcrypt.compare(password, user.password, (err, isMatch) => {
-        if (err || !isMatch) {
-          return res.status(401).json({ error: 'Invalid credentials.' });
-        }
+    const isMatch = bcrypt.compareSync(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid credentials.' });
+    }
 
-        const token = jwt.sign(
-          { id: user.id, email: user.email, name: user.name, role: user.role || 'regular' },
-          process.env.JWT_SECRET,
-          { expiresIn: '24h' }
-        );
+    const token = jwt.sign(
+      { id: user.id, email: user.email, name: user.name, role: user.role || 'regular' },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
 
-        res.json({
-          message: 'Login successful.',
-          token,
-          user: { id: user.id, email: user.email, name: user.name, role: user.role || 'regular', isAdmin: user.role === 'admin' }
-        });
-
-        db.run('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', [user.id]);
-        logActivity(user.id, 'LOGIN', `User logged in: ${user.email}`, req);
-      });
+    res.json({
+      message: 'Login successful.',
+      token,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role || 'regular', isAdmin: user.role === 'admin' }
     });
+
+    db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+    logActivity(user.id, 'LOGIN', `User logged in: ${user.email}`, req);
   } catch (error) {
     res.status(500).json({ error: 'Server error.' });
   }
@@ -116,17 +99,16 @@ router.post('/login', (req, res) => {
 
 // Verify token (for checking if user is still logged in)
 router.get('/verify', authenticateToken, (req, res) => {
-  db.get('SELECT id, email, name, role FROM users WHERE id = ?', [req.user.id], (err, user) => {
-    if (err || !user) {
-      return res.json({
-        valid: true,
-        user: { id: req.user.id, email: req.user.email, name: req.user.name || '', role: req.user.role || 'regular', isAdmin: req.user.role === 'admin' }
-      });
-    }
-    res.json({
+  const user = db.prepare('SELECT id, email, name, role FROM users WHERE id = ?').get(req.user.id);
+  if (!user) {
+    return res.json({
       valid: true,
-      user: { id: user.id, email: user.email, name: user.name || '', role: user.role || 'regular', isAdmin: user.role === 'admin' }
+      user: { id: req.user.id, email: req.user.email, name: req.user.name || '', role: req.user.role || 'regular', isAdmin: req.user.role === 'admin' }
     });
+  }
+  res.json({
+    valid: true,
+    user: { id: user.id, email: user.email, name: user.name || '', role: user.role || 'regular', isAdmin: user.role === 'admin' }
   });
 });
 
@@ -143,30 +125,21 @@ router.post('/change-password', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
     }
 
-    db.get('SELECT id, email, password FROM users WHERE id = ?', [req.user.id], async (err, user) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error.' });
-      }
+    const user = db.prepare('SELECT id, email, password FROM users WHERE id = ?').get(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
 
-      if (!user) {
-        return res.status(404).json({ error: 'User not found.' });
-      }
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Current password is incorrect.' });
+    }
 
-      const isMatch = await bcrypt.compare(currentPassword, user.password);
-      if (!isMatch) {
-        return res.status(401).json({ error: 'Current password is incorrect.' });
-      }
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, user.id);
 
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-      db.run('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, user.id], function (updateErr) {
-        if (updateErr) {
-          return res.status(500).json({ error: 'Failed to update password.' });
-        }
-
-        logActivity(user.id, 'PASSWORD_CHANGE', `User changed password: ${user.email}`, req);
-        res.json({ message: 'Password updated successfully.' });
-      });
-    });
+    logActivity(user.id, 'PASSWORD_CHANGE', `User changed password: ${user.email}`, req);
+    res.json({ message: 'Password updated successfully.' });
   } catch (error) {
     res.status(500).json({ error: 'Server error.' });
   }
@@ -180,34 +153,23 @@ router.post('/forgot-password', (req, res) => {
     return res.status(400).json({ error: 'Email is required.' });
   }
 
-  db.get('SELECT id, email FROM users WHERE email = ?', [email], (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error.' });
-    }
+  const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(email);
+  if (!user) {
+    return res.json({ message: 'If an account exists for that email, a reset link has been generated.' });
+  }
 
-    if (!user) {
-      return res.json({ message: 'If an account exists for that email, a reset link has been generated.' });
-    }
+  const resetToken = crypto.randomBytes(24).toString('hex');
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
-    const resetToken = crypto.randomBytes(24).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  db.prepare(
+    'UPDATE users SET password_reset_token = ?, token_expires = ? WHERE id = ?'
+  ).run(resetToken, expiresAt, user.id);
 
-    db.run(
-      'UPDATE users SET password_reset_token = ?, token_expires = ? WHERE id = ?',
-      [resetToken, expiresAt, user.id],
-      function (updateErr) {
-        if (updateErr) {
-          return res.status(500).json({ error: 'Failed to generate reset token.' });
-        }
+  logActivity(user.id, 'PASSWORD_RESET_REQUEST', `Password reset requested for ${user.email}`, req);
 
-        logActivity(user.id, 'PASSWORD_RESET_REQUEST', `Password reset requested for ${user.email}`, req);
-
-        res.json({
-          message: 'If an account exists for that email, a reset link has been generated.',
-          resetToken
-        });
-      }
-    );
+  res.json({
+    message: 'If an account exists for that email, a reset link has been generated.',
+    resetToken
   });
 });
 
@@ -224,39 +186,27 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
     }
 
-    db.get(
-      'SELECT id, email, token_expires FROM users WHERE password_reset_token = ?',
-      [token],
-      async (err, user) => {
-        if (err) {
-          return res.status(500).json({ error: 'Database error.' });
-        }
+    const user = db.prepare(
+      'SELECT id, email, token_expires FROM users WHERE password_reset_token = ?'
+    ).get(token);
 
-        if (!user) {
-          return res.status(400).json({ error: 'Invalid reset token.' });
-        }
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid reset token.' });
+    }
 
-        if (!user.token_expires || new Date(user.token_expires) < new Date()) {
-          return res.status(400).json({ error: 'Reset token has expired.' });
-        }
+    if (!user.token_expires || new Date(user.token_expires) < new Date()) {
+      return res.status(400).json({ error: 'Reset token has expired.' });
+    }
 
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        db.run(
-          `UPDATE users
-           SET password = ?, password_reset_token = NULL, token_expires = NULL
-           WHERE id = ?`,
-          [hashedPassword, user.id],
-          function (updateErr) {
-            if (updateErr) {
-              return res.status(500).json({ error: 'Failed to reset password.' });
-            }
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    db.prepare(
+      `UPDATE users
+       SET password = ?, password_reset_token = NULL, token_expires = NULL
+       WHERE id = ?`
+    ).run(hashedPassword, user.id);
 
-            logActivity(user.id, 'PASSWORD_RESET_COMPLETE', `Password reset completed for ${user.email}`, req);
-            res.json({ message: 'Password has been reset successfully.' });
-          }
-        );
-      }
-    );
+    logActivity(user.id, 'PASSWORD_RESET_COMPLETE', `Password reset completed for ${user.email}`, req);
+    res.json({ message: 'Password has been reset successfully.' });
   } catch (error) {
     res.status(500).json({ error: 'Server error.' });
   }

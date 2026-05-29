@@ -1,0 +1,9 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "node backend/server.js"
+
+[[mount]]
+source = "data"
+destination = "/data"
