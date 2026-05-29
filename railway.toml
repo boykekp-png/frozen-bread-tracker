@@ -1,9 +1,10 @@
 [build]
-builder = "dockerfile"
+builder = "DOCKERFILE"
 
 [deploy]
 startCommand = "node backend/server.js"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
 
-[[mount]]
-source = "data"
-destination = "/data"
+[[mounts]]
+mountPath = "/data"
