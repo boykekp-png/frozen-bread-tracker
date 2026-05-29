@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frozen Bread Tracker - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="header">
+            <div class="header-content">
+                <h1>🍞 Frozen Bread Tracker</h1>
+                <div class="user-info">
+                    <span id="user-email"></span>
+                    <span class="date-picker-label">Today is: <input type="date" id="selected-date" class="header-date-input"></span>
+                    <span id="admin-badge" class="btn btn-small" style="display:none; background:#1d4ed8; color:white;">Admin</span>
+                    <a id="manage-users-link" href="/users.html" class="btn btn-secondary" style="display:none;">Manage Users</a>
+                    <button id="theme-toggle" class="btn btn-secondary" title="Toggle dark mode">🌙</button>
+                    <button id="logout-btn" class="btn btn-secondary">Logout</button>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Bread Types Catalog -->
+            <div class="entries-section">
+                <h2>Bread Types Catalog</h2>
+                <div id="types-container">
+                    <div class="loading">Loading bread types...</div>
+                </div>
+                <p id="date-note" class="text-xs text-gray-500 mt-2">Expiration dates are calculated based on the selected date above.</p>
+            </div>
+
+            <!-- Add / Edit Bread Type Form (admin only) -->
+            <div id="bread-type-form-section" class="form-section">
+                <h2 id="form-heading">Add New Bread Type</h2>
+                <p id="non-admin-note" class="text-sm text-amber-700 mb-3" style="display:none;">You have read-only access. Only the admin can add, edit, or delete bread types.</p>
+                <form id="bread-type-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="bread-sku">SKU</label>
+                            <input type="text" id="bread-sku" required placeholder="Enter SKU (e.g. 30010)">
+                        </div>
+                        <div class="form-group">
+                            <label for="bread-name">Bread Name</label>
+                            <input type="text" id="bread-name" required placeholder="Enter bread name">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="bread-expiration-days">Expiration Days</label>
+                            <input type="number" id="bread-expiration-days" required min="1" placeholder="Days until expiration">
+                        </div>
+                        <div class="form-group"></div>
+                    </div>
+                    <input type="hidden" id="edit-type-id" value="">
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" id="submit-btn">Add Bread Type</button>
+                        <button type="button" class="btn btn-secondary" id="cancel-btn" style="display: none;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/theme.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>User Management</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="bg-slate-50">
+    <div class="max-w-6xl mx-auto p-6 space-y-6">
+      <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold">Admin User Management</h1>
+        <div class="flex gap-2 items-center">
+          <a href="/dashboard" class="btn btn-secondary">Back to Dashboard</a>
+          <button id="theme-toggle" class="btn btn-secondary" title="Toggle dark mode">🌙</button>
+        </div>
+      </div>
+
+    <section class="bg-white rounded-lg shadow p-5">
+      <h2 class="text-lg font-semibold mb-3">Create User</h2>
+      <form id="create-user-form" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <input id="new-user-name" type="text" placeholder="Name" class="border rounded px-3 py-2" required />
+        <input id="new-user-email" type="email" placeholder="Email" class="border rounded px-3 py-2" required />
+        <input id="new-user-password" type="password" placeholder="Password (min 6)" class="border rounded px-3 py-2" required minlength="6" />
+        <button class="btn btn-primary" type="submit">Create User</button>
+      </form>
+    </section>
+
+    <section class="bg-white rounded-lg shadow p-5">
+      <h2 class="text-lg font-semibold mb-3">Users</h2>
+      <div id="users-table-container">Loading users...</div>
+    </section>
+
+    <section class="bg-white rounded-lg shadow p-5">
+      <h2 class="text-lg font-semibold mb-3">Recent Activity Logs</h2>
+      <div id="logs-container">Loading logs...</div>
+    </section>
+  </div>
+
+  <script src="js/theme.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/users.js"></script>
+</body>
+</html>
